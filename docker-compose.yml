@@ -1,0 +1,463 @@
+# Copyright VMware, Inc.
+# SPDX-License-Identifier: APACHE-2.0
+
+version: "2"
+
+services:
+  kafka:
+    container_name: kafka
+    image: dockerhub.charisma.tech/bitnami/kafka:3.6
+    #network_mode: host
+    ports:
+      - "9092:9092"
+      - "9094:9092"
+      - "7071:7071"
+    volumes:
+      - "kafka_data:/bitnami"
+      - "./kafka_files/:/opt/prometheus/"
+    environment:
+      # KRaft settings
+      - KAFKA_CFG_NODE_ID=0
+      - KAFKA_CFG_PROCESS_ROLES=controller,broker
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093
+      # Listeners
+      - KAFKA_CFG_LISTENERS=INTERNAL://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      - KAFKA_CFG_ADVERTISED_LISTENERS=INTERNAL://:9092,EXTERNAL://:9094                  #PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:SASL_PLAINTEXT         #CONTROLLER:SASL or CONTROLLER:SSL
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=INTERNAL
+      ## Additional configs
+      - KAFKA_HEAP_OPTS=-Xmx1024m -Xms1024m
+      - KAFKA_CLIENT_USERS=admin,user           #Default: user      NOTE: When running in KRaft mode, only the first user:password pair will take effect, as KRaft mode does not support SCRAM mechanism yet.
+      - KAFKA_CLIENT_PASSWORDS=adminpassword,userpassword      #Default: bitnami
+      - KAFKA_CFG_SASL_MECHANISM_CONTROLLER_PROTOCOL=PLAIN
+      - KAFKA_CONTROLLER_USER=controller_user               # default: controller_user
+      - KAFKA_CONTROLLER_PASSWORD=controller_password            # default: bitnami
+      - KAFKA_KRAFT_CLUSTER_ID=o7OirS_5RlOYc4x1EH3M9w
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=false       #true
+      ## ACLs configs: org.apache.kafka.metadata.authorizer.StandardAuthorizer or kafka.security.authorizer.AclAuthorizer
+      - KAFKA_CFG_AUTHORIZER_CLASS_NAME=org.apache.kafka.metadata.authorizer.StandardAuthorizer
+      - KAFKA_CFG_ALLOW_EVERYONE_IF_NO_ACL_FOUND=true      #false
+      - KAFKA_CFG_SUPER_USERS=User:admin          #User:CN=user;
+      - EXTRA_ARGS=-javaagent:/opt/prometheus/jmx_prometheus_javaagent-0.20.0.jar=7071:/opt/prometheus/kafka-2_0_0.yml
+      - JMX_PROMETHEUS_PORT=7071
+      - KAFKA_OPTS=-Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Djava.rmi.server.hostname=localhost
+    
+    networks:
+      - kafka_data
+      
+      
+  prometheus-kafka-monitoring:
+    image: bitnami/prometheus:2.47.2-debian-11-r0
+    container_name: prometheus-kafka-monitoring
+    #network_mode: host
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/:/opt/bitnami/prometheus/conf/
+    networks:
+      - kafka_data
+      
+networks:
+  kafka_data:
+    driver: bridge
+
+volumes:
+   kafka_data:
+     driver: local
+
+
+
+
+
+
+
+# /usr/bin/kafkacat -L -b localhost:9094
+
+
+
+
+# Note: To connect from an external machine, change localhost above to your host's external IP/hostname and include EXTERNAL://0.0.0.0:9093 in KAFKA_CFG_LISTENERS to allow for remote connections.
+
+
+# Note: if you want to use SASL_SSL mechanism for client-broker connection, you must drop your Java Key Stores or PEM files into /opt/bitnami/kafka/config/certs and if they are password protected, use 
+# KAFKA_CERTIFICATE_PASSWORD=myCertificatePassword
+
+# an script for generating ssl certificate files
+# https://raw.githubusercontent.com/confluentinc/confluent-platform-security-tools/master/kafka-generate-ssl.sh
+# https://github.com/bitnami/containers/tree/main/bitnami/kafka
+
+
+## /bin/kafka-configs.sh --bootstrap-server host1:9092 --entity-type topics --entity-default --alter --add-config delete.retention.ms=172800000
+##### entity-type : (topic, broker, user, etc)
+##### entity-type : (topic, broker, user, etc)
+
+
+
+
+# producer.properties:
+# cat<<EOF>producer2.properties
+# bootstrap.servers=localhost:9094
+# sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="user" password="userpassword";
+# security.protocol=SASL_PLAINTEXT
+# sasl.mechanism=PLAIN
+# EOF
+
+
+# cat<<EOF>producer3.properties
+# bootstrap.servers=localhost:9094
+# sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="admin" password="adminpassword";
+# security.protocol=SASL_PLAINTEXT
+# sasl.mechanism=PLAIN
+# EOF
+
+
+
+# https://github.com/bitnami/containers/issues/23237
+
+
+
+
+# authorizer.class.name=kafka.security.authorizer.AclAuthorizer
+
+# use `kafka-acls`
+
+
+
+
+
+
+# https://wiki.folio.org/pages/viewpage.action?pageId=65112155
+
+
+
+
+
+
+
+
+
+
+# cat<<EOF>producer3.properties
+# bootstrap.servers=localhost:9094
+# sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="user" password="userpassword";
+# security.protocol=SASL_PLAINTEXT
+# sasl.mechanism=PLAIN
+# EOF
+
+# kafka-topics.sh --create --bootstrap-server localhost:9094  --replication-factor 1 --partitions 1 --topic test3 --command-config producer3.properties
+
+# kafka-topics.sh --create --bootstrap-server localhost:9094  --replication-factor 1 --partitions 1 --topic test4 --command-config producer3.properties
+
+
+# kafka-acls.sh --bootstrap-server localhost:9092 --add --allow-principal User:user --operation Read --topic test4
+# kafka-acls.sh --bootstrap-server localhost:9092 --add --allow-principal User:user --operation Write --topic test4
+
+
+
+# /opt/kafka/bin/kafka-consumer-groups.sh --list --bootstrap-server localhost:9092
+
+
+# kafka-acls --bootstrap-server localhost:9092 \
+#   --command-config adminclient-configs.conf \
+#   --add \
+#   --allow-principal User:alice \
+#   --allow-principal User:fred \
+#   --allow-host host-1 \
+#   --allow-host host-2 \
+#   --operation read \
+#   --operation write \
+#   --topic finance-topic
+
+
+
+
+# kafka-acls --bootstrap-server localhost:9092 \
+#   --command-config adminclient-configs.conf \
+#   --add \
+#   --allow-principal User:* \
+#   --operation All \
+#   --topic testTopic
+
+
+
+
+
+
+# https://docs.confluent.io/platform/current/kafka/authorization.html
+
+
+
+
+
+
+
+
+
+
+
+# kafka-topics.sh --bootstrap-server localhost:9092 --list
+
+
+
+# kafka-topics.sh --create --bootstrap-server localhost:9092  --replication-factor 1 --partitions 12 --topic tsepublicv2-lastindexvalue  --config retention.ms=604800000
+# kafka-topics.sh --create --bootstrap-server localhost:9092  --replication-factor 1 --partitions 12 --topic tsepublicv2-lastclienttype  --config retention.ms=604800000
+
+
+
+
+# kafka-topics.sh --bootstrap-server localhost:9092 --create --partitions 5 --topic mm2-offset-syncs.kafka-on-premise-cluster-source.internal
+
+# kafka-topics.sh --bootstrap-server localhost:9092 --create  --partitions 5 --replication-factor 1 --topic mirrormaker2-cluster-status
+
+# kafka-topics.sh --bootstrap-server localhost:9092 --create  --partitions 25 --replication-factor 1 --topic mirrormaker2-cluster-offsets
+
+# kafka-topics.sh --bootstrap-server localhost:9092 --create  --partitions 1 --replication-factor 1  --topic mirrormaker2-cluster-configs
+
+# kafka-topics.sh --bootstrap-server localhost:9092 --create  --partitions 1 --replication-factor 1  --topic heartbeats
+
+# kafka-topics.sh --bootstrap-server localhost:9092 --create  --partitions 1 --replication-factor 1  --topic  prod-kafka.checkpoints.internal
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# kafka-configs --describe --bootstrap-server localhost:9092 --entity-type topics --entity-name tsepublicv2-lastindexvalue
+# kafka-configs --describe --bootstrap-server localhost:9092 --entity-type topics --entity-name tsepublicv2-lastclienttype
+
+
+
+# kafka-configs.sh --bootstrap-server localhost:9092 --entity-type topics --entity-name tsepublicv2-lastindexvalue --alter --add-config retention.ms=604800000
+# kafka-configs.sh --bootstrap-server localhost:9092 --entity-type topics --entity-name tsepublicv2-lastclienttype --alter --add-config retention.ms=604800000
+
+
+
+
+# kafka-acls.sh --bootstrap-server localhost:9092 --add --allow-principal User:cip-consumer --operation Read --topic tsepublicv2-*
+# kafka-acls.sh --bootstrap-server localhost:9092 --add --allow-principal User:dmz-connect --operation All --topic tsepublicv2-*
+# kafka-acls.sh --bootstrap-server localhost:9092 --add --allow-principal User:dmz-connect --operation All --topic *
+
+
+# kafka-configs.sh --bootstrap-server host1:9092 --entity-type topics --entity-default --alter --add-config delete.retention.ms=172800000
+
+
+
+
+
+
+
+# cat<<EOF>produceradmin.properties
+# bootstrap.servers=localhost:9094
+# sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="admin" password="adminpassword";
+# security.protocol=SASL_PLAINTEXT
+# sasl.mechanism=PLAIN
+# EOF
+
+# cd /tmp/ ; 
+
+
+
+
+
+
+# cat<<EOF>produceradmin.properties
+# bootstrap.servers=10.104.137.10:9094
+# sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="admin" password="OgHmF37gBIn5FakPzsyOYTwA";
+# security.protocol=SASL_PLAINTEXT
+# sasl.mechanism=PLAIN
+# EOF
+
+
+
+
+
+
+# cat<<EOF>produceradmin.properties
+# bootstrap.servers=localhost:9094
+# sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="admin" password="OgHmF37gBIn5FakPzsyOYTwA";
+# security.protocol=SASL_PLAINTEXT
+# sasl.mechanism=PLAIN
+# EOF
+
+# kafka-topics.sh --create --bootstrap-server localhost:9094  --replication-factor 1 --partitions 1 --topic test3 --command-config produceradmin.properties
+
+
+# cat /opt/bitnami/kafka/config/server.properties | grep -Ev "^$|^#"
+
+
+
+
+
+
+
+
+
+
+# cat<<EOF>kafka_server.jaas
+# KafkaServer {
+#  org.apache.kafka.common.security.plain.PlainLoginModule required
+#    username="admin"
+#    password="admin-secret"
+
+# };
+# KafkaClient {
+#   org.apache.kafka.common.security.plain.PlainLoginModule required
+#   username="admin"
+#   password="admin-secret"
+#   ;
+# };
+# EOF
+
+# export KAFKA_OPTS="-Djava.security.auth.login.config=/opt/kafka/kafka_server.jaas"
+
+
+
+
+# cat<<EOF>cip-consumer.properties
+# sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="cip-consumer" password="ZX6UdBBtGG6MU8WaZJmjTs4o";
+# security.protocol=SASL_PLAINTEXT
+# sasl.mechanism=PLAIN
+# bootstrap.servers=10.104.137.10:9094
+# EOF
+
+
+# cat<<EOF>cip-consumer.properties
+# sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="cip-consumer" password="ZX6UdBBtGG6MU8WaZJmjTs4o";
+# security.protocol=SASL_PLAINTEXT
+# sasl.mechanism=PLAIN
+# bootstrap.servers=10.104.137.10:9094
+# EOF
+
+
+
+
+
+# cat<<EOF>producer.properties
+# security.protocol=SASL_PLAINTEXT
+# sasl.mechanism=PLAIN
+# bootstrap.servers=10.104.137.10:9094
+# EOF
+
+
+
+
+# bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic test-topic --from-beginning --group my-created-consumer-group
+
+
+
+
+
+
+
+
+
+
+# bin/kafka-consumer-groups.sh  --bootstrap-server localhost:9092 --describe --group consumergroup1 --members --verbose
+
+
+
+
+
+
+# cat<<EOF>messages 
+# 1:message1
+# 2:message2
+# 3:message3
+# 4:message4
+# 5:message5
+# 6:message6
+# EOF
+
+# $ cat messages | ./bin/kafka-console-producer.sh --bootstrap-server localhost:9092  --property "key.separator=:" --property "parse.key=true" --topic events3p3r
+
+# ./bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic events3p3r --property print.key=true --group consumergroup1
+
+
+
+# bin/kafka-acls.sh --bootstrap-server localhost:9092 --add --allow-principal User:cip-consumer --operation Read --group 'cip-' --resource-pattern-type prefixed
+# ###or
+# bin/kafka-acls.sh --bootstrap-server localhost:9092 --add --allow-principal User:cip-consumer --consumer --group 'cip-' --resource-pattern-type prefixed
+
+# bin/kafka-acls.sh --bootstrap-server localhost:9092 --add --allow-principal User:cip-consumer --operation Describe --group g
+# bin/kafka-acls.sh --bootstrap-server localhost:9092 --add --allow-principal User:cip-consumer --operation Describe --topic t
+
+### org.apache.kafka.metadata.authorizer.StandardAuthorizer
+
+
+
+
+# kafka-acls.sh --bootstrap-server localhost:9092 --add --allow-principal User:dmz-connect --operation All --topic *
+
+# bin/kafka-acls.sh --bootstrap-server localhost:9092 --add --allow-principal User:cip-consumer --consumer --topic 'prod-kafka.tsepublicv2-' --resource-pattern-type prefixed
+
+
+
+
+
+# https://www.dbi-services.com/blog/apache-kafka-consumer-group/
+# https://medium.com/@nzaporozhets/getting-started-with-kafka-acls-14b16bbf83d1
+# https://docs.confluent.io/platform/current/kafka/authorization.html
+# https://itecnote.com/tecnote/kafka-server-could-not-find-a-kafkaserver-in-jaas/
+# https://kafka.apache.org/documentation/#security_sasl_plain_brokerconfig
+# https://gist.github.com/jcustenborder/e98972768f2710e425c7e7a3975c9445
+# https://gist.github.com/marinakr/3ceab849944c39c6cc0052579c3c2229
+# https://www.orchome.com/10529
+# https://github.com/bitnami/containers/issues/29327
+# https://github.com/rmarting/strimzi-migration-demo/blob/main/02-target-cluster/04-kafka-mirror-maker2/event-bus-mirror-maker2.yml
+# https://wiki.folio.org/pages/viewpage.action?pageId=65112155
+
+# https://github.com/bitnami/containers/issues/23077
+
+
+
+##############Cluster
+# https://github.com/bitnami/containers/issues/23237
+
+
+
+
+
+####ui
+# https://docs.conduktor.io/
+
+
+#### tutorial java app
+
+# https://www.freecodecamp.org/news/apache-kafka-handbook/#how-to-use-kafka-console-producer
+
+
+
+# https://github.com/elephantscale/kafka-in-docker
+
+
+# https://jaehyeon.me/blog/2023-07-06-kafka-development-with-docker-part-9/
+# https://jaehyeon.me/blog/2023-07-13-kafka-development-with-docker-part-10/
+# https://jaehyeon.me/blog/2023-07-20-kafka-development-with-docker-part-11/
+
+
+
+# https://www.freecodecamp.org/news/apache-kafka-handbook/
+
+# kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic my_first_topic --from-beginning --formatter kafka.tools.DefaultMessageFormatter --property print.timestamp=true --property print.key=true --property print.value=true
+
+
+
+
+
